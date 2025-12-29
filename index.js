@@ -26,7 +26,7 @@
                 href.includes('sifalo') ||
                 href.includes('dodo') ||
                 href.includes('watch-course') ||
-                href.includes('dashboard')
+                href.includes('moon')
             ) {
                 return; // let browser reload page
             }
