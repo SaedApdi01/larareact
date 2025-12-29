@@ -1,90 +1,138 @@
- document.addEventListener('click', function(e) {
-            const link = e.target.closest('a');
-            if (!link) return;
+/*!
+ * LaraReact PJAX Navigation
+ * Author: Saed
+ * Version: 1.0.0
+ * Safe for payments & forms
+ */
 
-            const href = link.getAttribute('href');
+(function () {
+    'use strict';
 
-            // 1️⃣ External links → normal browser behavior
-            if (link.origin !== window.location.origin) return;
+    /* ------------------------------------------------------------------
+     | GLOBAL CONFIG (FROM HOST APP)
+     |------------------------------------------------------------------ */
 
-            // 2️⃣ Empty or anchor links (#) → normal behavior
-            if (!href || href.startsWith('#')) return;
+    const DEFAULT_EXCLUDES = [
+        'checkout',
+        'payment',
+        'paypal',
+        'stripe',
+        'logout'
+    ];
 
-            // 3️⃣ Open in new tab → normal behavior
-            if (link.target === '_blank') return;
+    const CONFIG = window.PJAX_CONFIG || {};
 
-            // 4️⃣ Logout → normal behavior
-            if (href.includes('logout')) return;
+    const EXCLUDED_ROUTES = [
+        ...DEFAULT_EXCLUDES,
+        ...(Array.isArray(CONFIG.exclude) ? CONFIG.exclude : [])
+    ];
 
-            // 5️⃣ 🚨 CHECKOUT & PAYMENTS (DO NOT USE PJAX HERE)
-            if (
-                href.includes('checkout') ||
-                // href.includes('cart') ||
-                href.includes('payment') ||
-                href.includes('paypal') ||
-                href.includes('stripe') ||
-                href.includes('sifalo') ||
-                href.includes('dodo') ||
-                href.includes('watch-course') ||
-                href.includes('moon')
-            ) {
-                return; // let browser reload page
-            }
+    /* ------------------------------------------------------------------
+     | CLICK INTERCEPTOR
+     |------------------------------------------------------------------ */
 
-            // 6️⃣ Optional: manual opt-out
-            if (link.dataset.noPjax === 'true') return;
+    document.addEventListener('click', function (e) {
+        const link = e.target.closest('a');
+        if (!link) return;
 
-            // Otherwise → load page inside app
-            e.preventDefault();
-            loadPage(link.href);
-        });
+        const href = link.getAttribute('href');
+        if (!href) return;
 
-        /*
-        |--------------------------------------------------------------------------
-        | LOAD PAGE WITHOUT FULL REFRESH
-        |--------------------------------------------------------------------------
-        */
-        function loadPage(url) {
-            const content = document.getElementById('app-content');
-            if (!content) return;
+        /* ---------- BASIC SAFETY ---------- */
 
-            // Show silent top loader (if exists)
-            if (typeof startSilentLoading === 'function') {
-                startSilentLoading();
-            }
+        // External link
+        if (link.origin !== window.location.origin) return;
 
-            fetch(url, {
-                    headers: {
-                        'X-Requested-With': 'XMLHttpRequest'
-                    }
-                })
-                .then(res => res.text())
-                .then(html => {
-                    const doc = new DOMParser().parseFromString(html, 'text/html');
-                    const newContent = doc.getElementById('app-content');
+        // Anchor or empty
+        if (href.startsWith('#')) return;
 
-                    if (!newContent) {
-                        stopSilentLoading?.();
-                        return;
-                    }
+        // New tab
+        if (link.target === '_blank') return;
 
-                    content.innerHTML = newContent.innerHTML;
-                    document.title = doc.title;
-                    history.pushState({}, '', url);
+        // Manual opt-out
+        if (link.hasAttribute('data-no-pjax')) return;
 
-                    stopSilentLoading?.();
-                })
-                .catch(() => {
-                    stopSilentLoading?.();
-                    location.reload(); // fallback
-                });
+        /* ---------- GLOBAL EXCLUDES ---------- */
+
+        if (EXCLUDED_ROUTES.some(route => href.includes(route))) {
+            return;
         }
 
-        /*
-        |--------------------------------------------------------------------------
-        | HANDLE BACK / FORWARD BUTTONS
-        |--------------------------------------------------------------------------
-        */
-        window.addEventListener('popstate', function() {
-            loadPage(location.href);
+        /* ---------- PJAX LOAD ---------- */
+
+        e.preventDefault();
+        loadPage(link.href);
+    });
+
+    /* ------------------------------------------------------------------
+     | LOAD PAGE VIA FETCH
+     |------------------------------------------------------------------ */
+
+    function loadPage(url) {
+        const container = document.getElementById('app-content');
+        if (!container) return location.href = url;
+
+        if (typeof window.startSilentLoading === 'function') {
+            window.startSilentLoading();
+        }
+
+        fetch(url, {
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest'
+            },
+            credentials: 'same-origin'
+        })
+            .then(res => res.text())
+            .then(html => {
+                const doc = new DOMParser().parseFromString(html, 'text/html');
+                const newContent = doc.getElementById('app-content');
+
+                if (!newContent) {
+                    location.href = url;
+                    return;
+                }
+
+                container.innerHTML = newContent.innerHTML;
+                document.title = doc.title;
+                history.pushState({}, '', url);
+
+                rebindScripts(container);
+
+                window.stopSilentLoading?.();
+            })
+            .catch(() => {
+                window.stopSilentLoading?.();
+                location.href = url;
+            });
+    }
+
+    /* ------------------------------------------------------------------
+     | BACK / FORWARD BUTTON SUPPORT
+     |------------------------------------------------------------------ */
+
+    window.addEventListener('popstate', function () {
+        loadPage(location.href);
+    });
+
+    /* ------------------------------------------------------------------
+     | RE-EXECUTE INLINE SCRIPTS
+     |------------------------------------------------------------------ */
+
+    function rebindScripts(container) {
+        const scripts = container.querySelectorAll('script');
+
+        scripts.forEach(oldScript => {
+            const script = document.createElement('script');
+
+            if (oldScript.src) {
+                script.src = oldScript.src;
+                script.async = false;
+            } else {
+                script.textContent = oldScript.textContent;
+            }
+
+            oldScript.replaceWith(script);
         });
+    }
+
+})();
