@@ -1,27 +1,19 @@
 /*!
  * LaraReact PJAX Navigation
  * Author: Saed
- * Version: 1.0.0
- * Safe for payments & forms
+ * Version: 1.0.1
+ * Safe for payments, forms, modals & UI interactions
  */
 
 (function () {
     'use strict';
 
     /* ------------------------------------------------------------------
-     | GLOBAL CONFIG (FROM HOST APP)
+     | GLOBAL CONFIG
      |------------------------------------------------------------------ */
 
-    const DEFAULT_EXCLUDES = [
-       //
-    ];
-
     const CONFIG = window.PJAX_CONFIG || {};
-
-    const EXCLUDED_ROUTES = [
-        ...DEFAULT_EXCLUDES,
-        ...(Array.isArray(CONFIG.exclude) ? CONFIG.exclude : [])
-    ];
+    const EXCLUDED_ROUTES = Array.isArray(CONFIG.exclude) ? CONFIG.exclude : [];
 
     /* ------------------------------------------------------------------
      | CLICK INTERCEPTOR
@@ -34,25 +26,33 @@
         const href = link.getAttribute('href');
         if (!href) return;
 
+        /* ---------- UI & JS SAFETY (CRITICAL) ---------- */
+
+        // Bootstrap / UI triggers
+        if (
+            link.hasAttribute('data-bs-toggle') ||
+            link.hasAttribute('data-toggle') ||
+            link.getAttribute('role') === 'button'
+        ) {
+            return;
+        }
+
+        // javascript:void(0)
+        if (href.startsWith('javascript:')) return;
+
+        // Inside modal
+        if (link.closest('.modal')) return;
+
         /* ---------- BASIC SAFETY ---------- */
 
-        // External link
         if (link.origin !== window.location.origin) return;
-
-        // Anchor or empty
         if (href.startsWith('#')) return;
-
-        // New tab
         if (link.target === '_blank') return;
-
-        // Manual opt-out
         if (link.hasAttribute('data-no-pjax')) return;
 
         /* ---------- GLOBAL EXCLUDES ---------- */
 
-        if (EXCLUDED_ROUTES.some(route => href.includes(route))) {
-            return;
-        }
+        if (EXCLUDED_ROUTES.some(route => href.includes(route))) return;
 
         /* ---------- PJAX LOAD ---------- */
 
@@ -68,14 +68,10 @@
         const container = document.getElementById('app-content');
         if (!container) return location.href = url;
 
-        if (typeof window.startSilentLoading === 'function') {
-            window.startSilentLoading();
-        }
+        window.startSilentLoading?.();
 
         fetch(url, {
-            headers: {
-                'X-Requested-With': 'XMLHttpRequest'
-            },
+            headers: { 'X-Requested-With': 'XMLHttpRequest' },
             credentials: 'same-origin'
         })
             .then(res => res.text())
@@ -93,7 +89,6 @@
                 history.pushState({}, '', url);
 
                 rebindScripts(container);
-
                 window.stopSilentLoading?.();
             })
             .catch(() => {
@@ -103,7 +98,7 @@
     }
 
     /* ------------------------------------------------------------------
-     | BACK / FORWARD BUTTON SUPPORT
+     | BACK / FORWARD SUPPORT
      |------------------------------------------------------------------ */
 
     window.addEventListener('popstate', function () {
@@ -111,18 +106,16 @@
     });
 
     /* ------------------------------------------------------------------
-     | RE-EXECUTE INLINE SCRIPTS
+     | SCRIPT RE-EXECUTION (SAFE)
      |------------------------------------------------------------------ */
 
     function rebindScripts(container) {
-        const scripts = container.querySelectorAll('script');
-
-        scripts.forEach(oldScript => {
+        container.querySelectorAll('script').forEach(oldScript => {
             const script = document.createElement('script');
 
             if (oldScript.src) {
                 script.src = oldScript.src;
-                script.async = false;
+                script.defer = true;
             } else {
                 script.textContent = oldScript.textContent;
             }
