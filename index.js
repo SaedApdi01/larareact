@@ -13,11 +13,7 @@
      |------------------------------------------------------------------ */
 
     const DEFAULT_EXCLUDES = [
-        'checkout',
-        'payment',
-        'paypal',
-        'stripe',
-        'logout'
+       //
     ];
 
     const CONFIG = window.PJAX_CONFIG || {};
